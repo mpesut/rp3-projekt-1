@@ -1,0 +1,3 @@
+CREATE TABLE Rooms(roomID int NOT NULL IDENTITY PRIMARY KEY, roomNo varchar(50) UNIQUE, roomType varchar(50), beds varchar(50), price bigint, booked varchar(50));
+CREATE TABLE Guests(guestID int NOT NULL IDENTITY PRIMARY KEY, guestName varchar(50), gender varchar(50), dateIn varchar(50), dateOut varchar(50), checkedIn varchar(50), checkedOut varchar(50), roomID int FOREIGN KEY REFERENCES Rooms(roomID));
+CREATE TABLE Reservation(reservationID int NOT NULL IDENTITY PRIMARY KEY, guestID int FOREIGN KEY REFERENCES Guests(guestID), guestName varchar(50),roomID int FOREIGN KEY REFERENCES Rooms(roomID), roomType varchar(50), dateIn varchar(50) NOT NULL, dateOut varchar(50) NOT NULL, price bigint NOT NULL, overall bigint NOT NULL);
