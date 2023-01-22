@@ -1,0 +1,280 @@
+using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Data;
+using System.Data.SqlClient;
+using System.Drawing;
+using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
+using System.Threading.Tasks;
+using System.Windows.Forms;
+
+namespace aplikacija
+{
+    public partial class newCustomer : UserControl
+    {
+        string query;
+        DBfunctions fn = new DBfunctions();
+        int rid;
+        public event EventHandler<EventArgs> guestAdded;
+        public newCustomer()
+        {
+            InitializeComponent();
+            dateIN.MinDate = DateTime.Now;
+            dateOUT.MinDate = DateTime.Now.AddDays(1);
+        }
+
+        private void txtRoomNo_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            query = "select price, roomID from Rooms where roomNo = '" + txtRoomNo.Text + "'";
+            DataSet ds = fn.getData(query);
+            txtPrice.Text = ds.Tables[0].Rows[0][0].ToString();
+            rid = int.Parse(ds.Tables[0].Rows[0][1].ToString());
+        }
+
+        private bool ispunjeno(int guestsNo)
+        {
+            if (txtName.Text == "" || txtRoomNo.Text == "" || txtType.Text == "" || txtBed.Text == "" ||
+                txtGender.Text == "" || dateIN.Text == "" || dateOUT.Text == "" || txtPrice.Text == "") return false;
+            if(guestsNo >= 2)
+            {
+                if (textBoxNameComp1.Text == "" || comboBoxGenderComp1.SelectedIndex == -1)
+                    return false;
+            }
+            if(guestsNo == 3)
+            {
+                if (textBoxNameComp2.Text == "" || comboBoxGenderComp2.SelectedIndex == -1)
+                    return false;
+            }
+            return true;
+        }
+
+        private void button1_Click(object sender, EventArgs e)
+        {
+            if (ispunjeno((int)txtNoGuests.SelectedItem))
+            {
+                string numberR = txtRoomNo.Text;
+                string typeR = txtType.Text;
+                string beds = txtBed.Text;
+                string name = txtName.Text;
+                string gender = txtGender.Text;
+                string dateIn = dateIN.Text;
+                string dateOut = dateOUT.Text;
+                int numberG = (int)txtNoGuests.SelectedItem;
+                Int64 price = Int64.Parse(txtPrice.Text);
+
+                query = "insert into Guests (guestName, gender, dateIn, dateOut, roomID) values ('" + name + "','" + gender + "','" + dateIn + "','" + dateOut + "'," + rid + ") update Rooms set booked = 'YES' where roomNo ='" + numberR + "'";
+                fn.setData(query, "Guest added!");
+                query = "select guestID from Guests where guestName = '" + name + "' and roomID = '" + rid + "'";
+                DataSet guest = fn.getData(query);
+                string guestid = guest.Tables[0].Rows[0][0].ToString();
+                TimeSpan stay = dateOUT.Value - dateIN.Value;
+
+                long overall = stay.Days * price;
+                if (dateIN.Value.Date == DateTime.Now.Date)
+                    overall += price;
+
+                query = "insert into Reservation (guestID, guestName, roomID, roomType, dateIn, dateOut, price, overall) values" +
+                        "(" + guestid + ",'" + name + "'," + rid + ",'" + typeR + "','" + dateIn + "','" + dateOut + "'," + price + "," + overall + ")";
+
+                fn.setData(query, "Reservation created!");
+
+                if(numberG == 2 || numberG == 3)
+                {
+                    string name1 = textBoxNameComp1.Text;
+                    string gender1 = comboBoxGenderComp1.SelectedItem.ToString();
+                    query = "insert into Guests (guestName, gender, dateIn, dateOut, roomID) values ('" + name1 + "','" + gender1 + "','" + dateIn + "','" + dateOut + "'," + rid + ")";
+                    fn.setData(query, "Guest 2 added!");
+                }
+
+                if(numberG == 3)
+                {
+                    string name2 = textBoxNameComp2.Text;
+                    string gender2 = comboBoxGenderComp2.SelectedItem.ToString();
+                    query = "insert into Guests (guestName, gender, dateIn, dateOut, roomID) values ('" + name2 + "','" + gender2 + "','" + dateIn + "','" + dateOut + "'," + rid + ")";
+                    fn.setData(query, "Guest 3 added!");
+                }
+                sakrij();
+                cleanPage();
+                guestAdded(this, null);
+            }
+            else
+            {
+                MessageBox.Show("Fill all the fields!", "Information missing", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+        }
+
+        public void setCombo(string query, ComboBox combo)
+        {
+            SqlDataReader dr = fn.getCombo(query);
+            while (dr.Read())
+            {
+                for (int i = 0; i < dr.FieldCount; i++)
+                {
+                    int a = 0;
+                    MessageBox.Show(dr.GetInt32(i).ToString());
+                    string query1 = "select dateIn, dateOut from Guests where roomID ='" + dr.GetInt32(i) + "'";
+                    DataSet dr2 = fn.getData(query1);
+                    foreach (DataRow row in dr2.Tables[0].Rows)
+                    {
+                        if (usporedi(dateOUT.Text, row["dateIn"].ToString()) == 2 || //novi izlaz je prije ulaza starog
+                            usporedi(row["dateOut"].ToString(), dateIN.Text) == 2) //novi ulaz je poslije izlaza + godina
+                        {
+                            continue;
+                        }
+                        else if (usporedi(dateIN.Text, row["dateOut"].ToString()) == 0 ||
+                            usporedi(dateIN.Text, row["dateOut"].ToString()) == 1) // novi ulaz je poslije starog izlaza
+                        {
+                            continue;
+                        }
+                        else
+                        {
+                            a = 1;
+                        }
+                    }
+                    if (a == 0)
+                    {
+                        string guery2 = "select roomNo from Rooms where roomID = '" + dr.GetInt32(i) + "'";
+                        DataSet sobe = fn.getData(guery2);
+                        combo.Items.Add(sobe.Tables[0].Rows[0][0].ToString());
+                    }
+                }
+            }
+            dr.Close();
+        }
+
+        private void txtType_SelectedIndexChanged(object sender, EventArgs e)
+        {
+
+        }
+
+        private void txtBed_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            txtRoomNo.Items.Clear();
+            txtNoGuests.Items.Clear();
+            txtRoomNo.Text = String.Empty;
+            txtType.SelectedIndex = -1;
+            txtPrice.Text = String.Empty;
+
+            for (int i = 1; i <= capacity(txtBed.Text); i++)
+                txtNoGuests.Items.Add(i);
+        }
+
+        private void cleanPage()
+        {
+            txtName.Clear();
+            txtGender.SelectedIndex = -1;
+            txtBed.SelectedIndex = -1;
+            txtType.SelectedIndex = -1;
+            txtNoGuests.Items.Clear();
+            txtNoGuests.Text = String.Empty;
+            txtPrice.Text = String.Empty;
+            txtRoomNo.Items.Clear();
+            txtRoomNo.Text = String.Empty;
+            comboBoxGenderComp2.SelectedIndex = -1;
+            comboBoxGenderComp1.SelectedIndex = -1;
+            textBoxNameComp1.Text = String.Empty;
+            textBoxNameComp2.Text = String.Empty;
+        }
+
+        private static int capacity(string beds)
+        {
+            switch(beds)
+            {
+                case "Single": return 1;
+                case "Double": return 2;
+                case "Triple": return 3;
+            }
+            return 0;
+        }
+
+        private void txtNoGuests_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            sakrij();
+            int brojGostiju = (int)txtNoGuests.SelectedItem;
+            pokazi(brojGostiju);
+            txtRoomNo.Items.Clear();
+            txtPrice.Text = String.Empty;
+            query = "select roomID from Rooms where roomType ='" + txtType.Text + "' and beds = '" + txtBed.Text + "'";
+            setCombo(query, txtRoomNo);
+        }
+
+        private void dateIN_ValueChanged(object sender, EventArgs e)
+        {
+            dateOUT.MinDate = dateIN.Value.AddDays(1);
+        }
+
+        private void pokazi(int i)
+        {
+            if (i == 2 || i == 3)
+            {
+                labelgendercomp1.Visible = true;
+                labelnamecomp1.Visible = true;
+                textBoxNameComp1.Visible = true;
+                comboBoxGenderComp1.Visible = true;
+            }
+            if (i == 3)
+            {
+                labelgendercomp2.Visible = true;
+                labelnamecomp2.Visible = true;
+                textBoxNameComp2.Visible = true;
+                comboBoxGenderComp2.Visible = true;
+            }
+        }
+
+        private void sakrij()
+        {
+            textBoxNameComp1.Visible = false;
+            comboBoxGenderComp1.Visible = false;
+            textBoxNameComp2.Visible = false;
+            comboBoxGenderComp2.Visible = false;
+            labelgendercomp1.Visible = false;
+            labelnamecomp1.Visible = false;
+            labelgendercomp2.Visible = false;
+            labelnamecomp2.Visible = false;
+        }
+
+        private int usporedi(string a, string b) // dan, a mj godina
+        {
+            string[] a1 = a.Split(' ');
+            string[] b1 = b.Split(' ');
+            int dan1 = Int32.Parse(a1[1]);
+            int dan2 = Int32.Parse(b1[1]);
+            int mj1 = vrati_indeks(a1[2]);
+            int mj2 = vrati_indeks(b1[2]);
+            int god1 = Int32.Parse(a1[3]);
+            int god2 = Int32.Parse(b1[3]);
+            if (dan1 < dan2 && mj1 <= mj2 || mj1 < mj2) // datum 1 je manji
+            {
+                return 2;
+            }
+            else if (dan1 == dan2 && mj1 == mj2) //isti datumi
+            {
+                return 1;
+            }
+            else if (god1 < god2)
+            {
+                return 2;
+            }
+            else return 0;
+        }
+
+        private int vrati_indeks(string m)
+        {
+            if (m == "January") return 0;
+            else if (m == "February") return 1;
+            else if (m == "March") return 2;
+            else if (m == "April") return 3;
+            else if (m == "May") return 4;
+            else if (m == "June") return 5;
+            else if (m == "July") return 6;
+            else if (m == "August") return 7;
+            else if (m == "September") return 8;
+            else if (m == "October") return 9;
+            else if (m == "November") return 10;
+            else return 11;
+
+        }
+    }
+}
